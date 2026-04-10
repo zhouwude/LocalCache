@@ -2,17 +2,16 @@ import Foundation
 
 /// Manages cache entry expiration and cleanup
 public final class ExpirationManager {
-    private var timers: [String: Timer] = [:]
     private let lock: Lock
     private var cleanupTasks: [String: Task<Void, Never>] = [:]
-    
+
     /// Shared instance for global expiration management
     public static let shared = ExpirationManager()
-    
+
     private init() {
         self.lock = Lock()
     }
-    
+
     /// Schedule a cleanup task
     /// - Parameters:
     ///   - cacheId: Unique cache identifier
@@ -24,45 +23,39 @@ public final class ExpirationManager {
         cleanup: @escaping () async -> Void
     ) {
         lock.sync {
-            // Cancel existing timer
-            timers[cacheId]?.invalidate()
+            // Cancel existing task
             cleanupTasks[cacheId]?.cancel()
-            
+
             // Create new async task for cleanup
             let task = Task {
+                // Execute cleanup immediately on first run
+                await cleanup()
+
                 while !Task.isCancelled {
                     try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
-                    
+
                     if Task.isCancelled { break }
-                    
+
                     await cleanup()
                 }
             }
-            
+
             cleanupTasks[cacheId] = task
         }
     }
-    
+
     /// Cancel a scheduled cleanup task
     /// - Parameter cacheId: Cache identifier
     public func cancel(cacheId: String) {
         lock.sync {
-            timers[cacheId]?.invalidate()
-            timers.removeValue(forKey: cacheId)
-            
             cleanupTasks[cacheId]?.cancel()
             cleanupTasks.removeValue(forKey: cacheId)
         }
     }
-    
+
     /// Cancel all scheduled tasks
     public func cancelAll() {
         lock.sync {
-            for timer in timers.values {
-                timer.invalidate()
-            }
-            timers.removeAll()
-            
             for task in cleanupTasks.values {
                 task.cancel()
             }

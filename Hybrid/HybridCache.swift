@@ -1,4 +1,5 @@
 import Foundation
+import os.log
 
 /// Hybrid cache combining memory and disk storage
 public final class HybridCache<Key: Hashable, Value: Codable>: CacheProtocol {
@@ -23,24 +24,35 @@ public final class HybridCache<Key: Hashable, Value: Codable>: CacheProtocol {
     /// - Parameter configuration: Cache configuration
     public init(configuration: CacheConfiguration = .hybridCache()) {
         self.configuration = configuration
-        
+
         if configuration.enableMemoryCache {
             self.memoryCache = MemoryCache(configuration: configuration)
         } else {
             self.memoryCache = nil
         }
-        
+
         if configuration.enableDiskCache {
             self.diskCache = DiskCache(configuration: configuration)
         } else {
             self.diskCache = nil
         }
-        
+
         self.asyncQueue = DispatchQueue(
             label: "com.localcache.hybrid.async",
             qos: configuration.queuePriority,
             attributes: .concurrent
         )
+    }
+
+    /// Log disk write errors (called from background task)
+    private static func logDiskWriteError(_ error: any Error) {
+        #if DEBUG
+        print("[HybridCache] Disk persistence failed: \(error.localizedDescription)")
+        print("[HybridCache] Data will not survive app restart")
+        #else
+        os_log("[HybridCache] Disk persistence failed: %{public}@. Data will not survive app restart.",
+               log: .default, type: .error, error.localizedDescription)
+        #endif
     }
     
     /// Prepare the cache (call once after initialization)
@@ -69,9 +81,10 @@ public final class HybridCache<Key: Hashable, Value: Codable>: CacheProtocol {
                     // Task was cancelled, silently ignore
                     return
                 } catch {
-                    // Log disk write errors but don't propagate to caller
-                    // since this is a background operation
-                    print("[HybridCache] Disk write failed: \(error.localizedDescription)")
+                    // Log disk write errors for observability
+                    // Memory cache write succeeded, so caller sees success
+                    // but disk persistence failure means data won't survive app restart
+                    Self.logDiskWriteError(error)
                 }
             }
         }

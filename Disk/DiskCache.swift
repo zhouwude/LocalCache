@@ -44,7 +44,7 @@ public final class DiskCache<Key: Hashable, Value: Codable>: CacheProtocol {
     public func set(_ value: Value, forKey key: Key, expiration: TimeInterval? = nil) async throws {
         let keyString = keyToString(key)
         let exp = expiration ?? configuration.defaultExpiration
-        
+
         // Encode value
         let data: Data
         do {
@@ -52,11 +52,11 @@ public final class DiskCache<Key: Hashable, Value: Codable>: CacheProtocol {
         } catch {
             throw CacheError.encodingFailed(error.localizedDescription)
         }
-        
-        // Write to disk
+
+        // Write to disk first (await success before updating metadata)
         try await manager.write(data, forKey: keyString)
-        
-        // Update metadata
+
+        // Update metadata only after successful write
         metadataLock.sync {
             let entryMeta = DiskCacheMetadata.EntryMetadata(
                 createdAt: Date(),
@@ -64,7 +64,7 @@ public final class DiskCache<Key: Hashable, Value: Codable>: CacheProtocol {
                 size: Int64(data.count)
             )
             metadata.entries[keyString] = entryMeta
-            
+
             // Update access order
             if let index = metadata.accessOrder.firstIndex(of: keyString) {
                 metadata.accessOrder.remove(at: index)
@@ -72,13 +72,13 @@ public final class DiskCache<Key: Hashable, Value: Codable>: CacheProtocol {
             metadata.accessOrder.append(keyString)
             metadata.lastAccess[keyString] = Date()
         }
-        
+
         // Cleanup if needed
         if manager.isFull {
             try await manager.cleanup(metadata: &metadata)
         }
-        
-        // Save metadata
+
+        // Save metadata asynchronously (failure is acceptable here)
         try? await manager.saveMetadata(metadata)
     }
     
