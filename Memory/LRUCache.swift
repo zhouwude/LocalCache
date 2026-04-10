@@ -69,6 +69,7 @@ public final class LRUCache<Key: Hashable, Value> {
             // Evict if necessary
             var evicted: CacheEntry<Value>? = nil
             while (cache.count >= maxItemCount || currentCost + entry.cost > maxTotalCost), let lruNode = tail {
+                cache.removeValue(forKey: lruNode.key)
                 removeNode(lruNode)
                 currentCost -= lruNode.entry.cost
                 if evicted == nil {
@@ -94,6 +95,7 @@ public final class LRUCache<Key: Hashable, Value> {
                 if let node = cache[key] {
                     removeNode(node)
                     cache[key] = nil
+                    currentCost -= node.entry.cost
                 }
                 return nil
             }
