@@ -28,6 +28,9 @@ public final class ExpirationManager {
 
             // Create new async task for cleanup
             let task = Task {
+                // Execute cleanup immediately on first run
+                await cleanup()
+
                 while !Task.isCancelled {
                     try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
 

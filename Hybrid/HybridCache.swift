@@ -1,4 +1,5 @@
 import Foundation
+import os.log
 
 /// Hybrid cache combining memory and disk storage
 public final class HybridCache<Key: Hashable, Value: Codable>: CacheProtocol {
@@ -44,10 +45,13 @@ public final class HybridCache<Key: Hashable, Value: Codable>: CacheProtocol {
     }
 
     /// Log disk write errors (called from background task)
-    private static func logDiskWriteError(_ error: Error) {
+    private static func logDiskWriteError(_ error: any Error) {
         #if DEBUG
         print("[HybridCache] Disk persistence failed: \(error.localizedDescription)")
         print("[HybridCache] Data will not survive app restart")
+        #else
+        os_log("[HybridCache] Disk persistence failed: %{public}@. Data will not survive app restart.",
+               log: .default, type: .error, error.localizedDescription)
         #endif
     }
     
